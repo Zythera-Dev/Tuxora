@@ -74,7 +74,7 @@ jobs:
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
 
-      - name: Sign Release APK
+      - name: Sign Release APK (only if a release key secret is configured)
         shell: bash
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
@@ -82,6 +82,12 @@ jobs:
           ALIAS: ${{ secrets.ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "No SIGNING_KEY secret set - keeping the gradle-built (debug-signed) APK."
+            echo "This APK is installable for testing; publish-grade signing needs the secrets."
+            echo "signedReleaseFile=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           BT=""
           for d in "$ANDROID_SDK_ROOT/build-tools/"*; do
@@ -103,7 +109,12 @@ jobs:
         shell: bash {0}
         run: |
           mkdir -p dist
-          cp "${{ steps.sign_app.outputs.signedReleaseFile }}" dist/tuxora.apk
+          APK="${{ steps.sign_app.outputs.signedReleaseFile }}"
+          if [ -z "$APK" ]; then
+            APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n1)
+          fi
+          echo "Using APK: $APK"
+          cp "$APK" dist/tuxora.apk
           ls -la dist
           (cd dist && sha256sum tuxora.apk > sha256sums.txt && cat sha256sums.txt)
 
